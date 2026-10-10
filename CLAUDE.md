@@ -95,7 +95,7 @@ To modify the conversion behavior:
 
 ## GitHub Repository
 
-This repository is hosted on GitHub at: https://github.com/ntilau/gmail-mbox-to-markdown
+This repository is hosted on GitHub at: https://github.com/ntilau/MboxMD
 
 Repository details:
 - Private repository
