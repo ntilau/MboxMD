@@ -1,0 +1,84 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+This repository contains a Python script that converts Google Takeout Mbox email exports to Markdown format, extracting attachments in the process. The script processes an Mbox file containing emails and generates a structured Markdown file with all messages and their attachments.
+
+## Common Commands
+
+### Running the Conversion Script
+
+To convert an Mbox file to Markdown:
+
+```bash
+python3 mbox_to_markdown.py
+```
+
+The script is configured to process:
+- Input: `/Users/ntilau/Downloads/Takeout/Mail/All_mail_Including_Spam_and_Trash.mbox`
+- Output directory: `/Users/ntilau/Downloads/Takeout/Mail/mbox_markdown_output/`
+- Markdown output: `/Users/ntilau/Downloads/Takeout/Mail/mbox_markdown_output/mailbox.md`
+- Attachments directory: `/Users/ntilau/Downloads/Takeout/Mail/mbox_markdown_output/attachments/`
+
+### Modifying Input/Output Paths
+
+To use different paths, edit the `mbox_path` and `output_dir` variables in `mbox_to_markdown.py`:
+
+```python
+mbox_path = '/path/to/your/mailbox.mbox'
+output_dir = '/path/to/output/directory'
+```
+
+## Code Structure
+
+### Main Components
+
+1. **mbox_to_markdown.py** - The primary conversion script
+   - Reads an Mbox file using Python's `mailbox` module
+   - Extracts email metadata (From, To, Subject, Date)
+   - Processes both plain text and HTML email bodies
+   - Saves attachments to a dedicated directory
+   - Generates a structured Markdown file with all messages
+
+2. **Output Directory Structure**
+   - `mailbox.md` - Combined Markdown file containing all emails
+   - `attachments/` - Directory containing all extracted attachments
+     - Files are safely renamed to avoid filesystem conflicts
+     - Duplicate filenames are handled with numerical suffixes
+
+### Key Functions
+
+- `decode_mime_words(s)` - Decodes MIME-encoded header strings
+- `get_plain_text_part(message)` - Extracts plain text body from email
+- `get_html_part(message)` - Extracts HTML body from email
+- `safe_filename(filename)` - Creates filesystem-safe filenames
+- `main()` - Orchestrates the conversion process
+
+## Development Workflow
+
+### Typical Usage
+
+1. Place your Mbox file in the repository directory
+2. Update the `mbox_path` variable in `mbox_to_markdown.py` if needed
+3. Run the conversion script: `python3 mbox_to_markdown.py`
+4. Find the output in the `mbox_markdown_output/` directory
+   - Read emails in `mailbox.md`
+   - Access attachments in the `attachments/` subdirectory
+
+### Customization
+
+To modify the conversion behavior:
+- Adjust the body extraction logic in `get_plain_text_part()` or `get_html_part()`
+- Modify the attachment handling in the main loop
+- Change the Markdown formatting in the output generation section
+- Enhance the HTML-to-text conversion if better formatting is needed
+
+## Notes
+
+- The script handles basic HTML-to-text conversion for emails without plain text bodies
+- Attachment filenames are sanitized to remove unsafe characters
+- Duplicate attachment filenames are automatically resolved with numerical suffixes
+- The Mbox file itself is gitignored due to its large size
+- Output files (Markdown and attachments) are tracked by git
