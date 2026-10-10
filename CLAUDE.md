@@ -23,20 +23,35 @@ To convert an Mbox file to Markdown and remove duplicate attachments:
 python3 mbox_to_markdown.py
 ```
 
-The script is configured to process:
-- Input: `/Users/ntilau/Downloads/Takeout/Mail/All_mail_Including_Spam_and_Trash.mbox`
-- Output directory: `/Users/ntilau/Downloads/Takeout/Mail/mbox_markdown_output/`
-- Markdown output: `/Users/ntilau/Downloads/Takeout/Mail/mbox_markdown_output/mailbox.md`
-- Attachments directory: `/Users/ntilau/Downloads/Takeout/Mail/mbox_markdown_output/attachments/`
+All three arguments are optional positional arguments:
 
-### Modifying Input/Output Paths
-
-To use different paths, edit the `mbox_path` and `output_dir` variables in `mbox_to_markdown.py`:
-
-```python
-mbox_path = '/path/to/your/mailbox.mbox'
-output_dir = '/path/to/output/directory'
+```bash
+python3 mbox_to_markdown.py [mbox_path] [output_dir] [limit]
 ```
+
+`limit` converts only the first N messages, which is useful for spot-checking the
+output format before committing to a full run over a multi-gigabyte mailbox.
+
+The defaults (in `mbox_to_markdown.py`) are:
+
+- Input: `/Users/ntilau/Downloads/Mail/All_mail_Including_Spam_and_Trash.mbox`
+- Output directory: `/Users/ntilau/Downloads/Mail/mbox_markdown_output/`
+- Markdown output: `/Users/ntilau/Downloads/Mail/mbox_markdown_output/mailbox.md`
+- Attachments directory: `/Users/ntilau/Downloads/Mail/mbox_markdown_output/attachments/`
+
+### One Run at a Time
+
+The script takes an exclusive lock (`<output_dir>/.mbox_to_markdown.lock`) and
+refuses to start if another conversion is already writing to the same output
+directory. This matters: each run deletes the duplicate attachments *it* found,
+so two concurrent runs remove files the other run's markdown still links to,
+leaving `mailbox.md` full of dead attachment links. A lock left behind by a
+killed run is reclaimed automatically once its pid is gone; the error message
+says which file to delete if a lock ever needs removing by hand.
+
+Every run ends by verifying that all attachment links in `mailbox.md` resolve —
+look for `All attachment links resolve.` (a `WARNING:` line instead means the
+markdown and the attachments directory disagree).
 
 ## Code Structure
 
@@ -53,35 +68,65 @@ output_dir = '/path/to/output/directory'
 
 2. **Output Directory Structure** (not tracked by git, can be regenerated)
    - `mailbox.md` - Combined Markdown file containing all emails with updated attachment references
+     - Opens with `# Mailbox Export`, `Total messages: N` and the date range
+     - Then a `## Index` of one line per message: `- [Message N](#message-N) — YYYY-MM-DD — Sender — Subject`
+     - Then one `## Message N` section per email, with `**From:**` / `**To:**` / `**Subject:**` /
+       `**Date:**` fields, an optional `**Attachments:**` list, and the body fenced by `---`
    - `attachments/` - Directory containing all extracted attachments (duplicates removed)
      - Files are safely renamed to avoid filesystem conflicts
      - Duplicate filenames are handled with numerical suffixes during initial save
      - After deduplication, only one copy of each unique attachment remains
+   - `.mbox_to_markdown.lock` - Present only while a conversion is running
 
 ### Key Functions
 
 - `decode_mime_words(s)` - Decodes MIME-encoded header strings
-- `get_plain_text_part(message)` - Extracts plain text body from email
-- `get_html_part(message)` - Extracts HTML body from email
+- `clean_text(text)` - Normalises whitespace while preserving paragraph breaks
+- `get_plain_text_part(message)` / `get_html_part(message)` - Extract body parts
+- `strip_markup_noise(text)` - Removes leaked CSS, VML/Outlook markup and comments,
+  including a line that begins with stylesheet syntax even when the lines around it
+  are prose (mail clients wrap declarations mid-value, leaving lone fragments)
+- `looks_like_leaked_markup(text, stripped)` - Decides whether a `text/plain` part is
+  really markup and the HTML part should be used instead
+- `strip_invisible_padding(text)` - Drops invisible padding characters, and lines that
+  were nothing but padding. Characters that carry meaning survive where real text uses
+  them: the ZWNJ in Persian words, the ZWJ in emoji sequences, LRM/RLM in bidi text.
+  The decision is made per character from its neighbours, so the same character is
+  dropped as filler next to a space, a digit or another mark (`servizio <ZWNJ> <ZWNJ>`,
+  `3<ZWJ>1<ZWJ> dicembre`) and kept between two ordinary characters
+- `html_to_text(html_content)` - Basic HTML-to-text conversion
+- `sanitize_body(body)` - Escapes characters that would break Markdown structure
+  (leading `#`, `|`, fences, setext-underline lines, stray `<`) while keeping autolinks
 - `safe_filename(filename)` - Creates filesystem-safe filenames
-- `main()` - Orchestrates the conversion process, including deduplication and reference updates
+- `attachment_link(filename)` - Percent-encodes an attachment name for a link destination
+- `acquire_lock(output_dir)` - Refuses to start when another run owns the output directory
+- `verify_attachment_links(md_file, output_dir)` - Reports links whose target file is missing
+- `main()` - Orchestrates conversion, deduplication, reference updates and verification
+
+### Body Selection
+
+Gmail's generated `text/plain` parts frequently contain raw CSS stylesheets and even
+raw Outlook/VML markup rather than readable text. `build_body()` strips markup noise
+from the plain-text part first and only falls back to the HTML part when the plain
+text is missing or still looks like leaked markup after cleaning.
 
 ## Development Workflow
 
 ### Typical Usage
 
-1. Place your Mbox file in the repository directory
-2. Update the `mbox_path` variable in `mbox_to_markdown.py` if needed
-3. Run the conversion script: `python3 mbox_to_markdown.py`
-4. The script will:
+1. Put the Mbox file somewhere on disk (the default path is the repository's mailbox)
+2. Run the conversion: `python3 mbox_to_markdown.py [mbox_path] [output_dir] [limit]`
+3. The script will:
    - Process all emails in the Mbox file
    - Extract attachments and save them to the attachments directory
    - Detect and remove duplicate attachments (based on MD5 hash)
    - Update all attachment references in mailbox.md to point to the kept files
+   - Verify that every remaining attachment link resolves
    - Generate the final markdown output
-5. Find the output in the `mbox_markdown_output/` directory
+4. Find the output in the `mbox_markdown_output/` directory
    - Read emails in `mailbox.md`
    - Access attachments in the `attachments/` subdirectory
+5. Spot-check a run cheaply with a limit first, e.g. `python3 mbox_to_markdown.py All_mail_Including_Spam_and_Trash.mbox /tmp/md_check 500`
 
 ### Customization
 
@@ -107,8 +152,11 @@ Repository details:
 
 - The script handles basic HTML-to-text conversion for emails without plain text bodies
 - Attachment filenames are sanitized to remove unsafe characters
+- Attachment link destinations are percent-encoded, since Markdown link targets cannot
+  contain spaces or most non-ASCII characters
 - Duplicate attachment filenames are automatically resolved with numerical suffixes during initial save
 - After processing, the script identifies and removes duplicate attachments based on identical MD5 hash content
+- Frame the run with a single process: concurrent runs over one output directory corrupt each other
 - The Mbox file itself is gitignored due to its large size (can be regenerated from Google Takeout)
 - Output files (Markdown and attachments) are gitignored as they can be regenerated by running the script
 - Only the script, documentation, and .gitignore are tracked in the repository
