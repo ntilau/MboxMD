@@ -6,11 +6,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This repository contains a Python script that converts Google Takeout Mbox email exports to Markdown format, extracting attachments in the process. The script processes an Mbox file containing emails and generates a structured Markdown file with all messages and their attachments.
 
+Key features include:
+- Extraction of email metadata (From, To, Subject, Date)
+- Processing of both plain text and HTML email bodies
+- Saving attachments to a dedicated directory with safe filenames
+- Automatic detection and removal of duplicate attachments based on MD5 hash
+- Generation of a structured Markdown file with all messages and updated attachment references
+
 ## Common Commands
 
 ### Running the Conversion Script
 
-To convert an Mbox file to Markdown:
+To convert an Mbox file to Markdown and remove duplicate attachments:
 
 ```bash
 python3 mbox_to_markdown.py
@@ -39,14 +46,17 @@ output_dir = '/path/to/output/directory'
    - Reads an Mbox file using Python's `mailbox` module
    - Extracts email metadata (From, To, Subject, Date)
    - Processes both plain text and HTML email bodies
-   - Saves attachments to a dedicated directory
+   - Saves attachments to a dedicated directory with safe filenames
+   - Detects and removes duplicate attachments based on MD5 hash
+   - Updates attachment references in the output Markdown file
    - Generates a structured Markdown file with all messages
 
-2. **Output Directory Structure**
-   - `mailbox.md` - Combined Markdown file containing all emails
-   - `attachments/` - Directory containing all extracted attachments
+2. **Output Directory Structure** (not tracked by git, can be regenerated)
+   - `mailbox.md` - Combined Markdown file containing all emails with updated attachment references
+   - `attachments/` - Directory containing all extracted attachments (duplicates removed)
      - Files are safely renamed to avoid filesystem conflicts
-     - Duplicate filenames are handled with numerical suffixes
+     - Duplicate filenames are handled with numerical suffixes during initial save
+     - After deduplication, only one copy of each unique attachment remains
 
 ### Key Functions
 
@@ -54,7 +64,7 @@ output_dir = '/path/to/output/directory'
 - `get_plain_text_part(message)` - Extracts plain text body from email
 - `get_html_part(message)` - Extracts HTML body from email
 - `safe_filename(filename)` - Creates filesystem-safe filenames
-- `main()` - Orchestrates the conversion process
+- `main()` - Orchestrates the conversion process, including deduplication and reference updates
 
 ## Development Workflow
 
@@ -63,22 +73,43 @@ output_dir = '/path/to/output/directory'
 1. Place your Mbox file in the repository directory
 2. Update the `mbox_path` variable in `mbox_to_markdown.py` if needed
 3. Run the conversion script: `python3 mbox_to_markdown.py`
-4. Find the output in the `mbox_markdown_output/` directory
+4. The script will:
+   - Process all emails in the Mbox file
+   - Extract attachments and save them to the attachments directory
+   - Detect and remove duplicate attachments (based on MD5 hash)
+   - Update all attachment references in mailbox.md to point to the kept files
+   - Generate the final markdown output
+5. Find the output in the `mbox_markdown_output/` directory
    - Read emails in `mailbox.md`
    - Access attachments in the `attachments/` subdirectory
 
 ### Customization
 
 To modify the conversion behavior:
+
 - Adjust the body extraction logic in `get_plain_text_part()` or `get_html_part()`
 - Modify the attachment handling in the main loop
 - Change the Markdown formatting in the output generation section
 - Enhance the HTML-to-text conversion if better formatting is needed
+- Modify the deduplication logic (currently keeps first-encountered file as original)
+
+## GitHub Repository
+
+This repository is hosted on GitHub at: https://github.com/ntilau/gmail-mbox-to-markdown
+
+Repository details:
+- Private repository
+- Topics: email, mbox, markdown, python, google-takeout
+- Contains the conversion script, documentation, and .gitignore
+- Large files (mbox input and output directory) are intentionally not tracked
 
 ## Notes
 
 - The script handles basic HTML-to-text conversion for emails without plain text bodies
 - Attachment filenames are sanitized to remove unsafe characters
-- Duplicate attachment filenames are automatically resolved with numerical suffixes
-- The Mbox file itself is gitignored due to its large size
-- Output files (Markdown and attachments) are tracked by git
+- Duplicate attachment filenames are automatically resolved with numerical suffixes during initial save
+- After processing, the script identifies and removes duplicate attachments based on identical MD5 hash content
+- The Mbox file itself is gitignored due to its large size (can be regenerated from Google Takeout)
+- Output files (Markdown and attachments) are gitignored as they can be regenerated by running the script
+- Only the script, documentation, and .gitignore are tracked in the repository
+- To regenerate output after cloning: place your Mbox file in the directory and run `python3 mbox_to_markdown.py`
