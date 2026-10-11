@@ -39,6 +39,17 @@ The defaults (in `mbox_to_markdown.py`) are:
 - Markdown output: `/Users/ntilau/Downloads/Mail/mbox_markdown_output/mailbox.md`
 - Attachments directory: `/Users/ntilau/Downloads/Mail/mbox_markdown_output/attachments/`
 
+There is no test suite. Verification is a syntax check plus a short limited run
+into a throwaway directory:
+
+```bash
+python3 -m py_compile mbox_to_markdown.py
+python3 mbox_to_markdown.py All_mail_Including_Spam_and_Trash.mbox /tmp/md_check 500
+```
+
+The script uses only the standard library (`mailbox`, `email`, `hashlib`,
+`urllib.parse`); there is nothing to install.
+
 ### One Run at a Time
 
 The script takes an exclusive lock (`<output_dir>/.mbox_to_markdown.lock`) and
@@ -51,7 +62,19 @@ says which file to delete if a lock ever needs removing by hand.
 
 Every run ends by verifying that all attachment links in `mailbox.md` resolve —
 look for `All attachment links resolve.` (a `WARNING:` line instead means the
-markdown and the attachments directory disagree).
+markdown and the attachments directory disagree). Per-message progress
+(`converted 250/40000 messages`) goes to stderr; the dedup and link-verification
+summary goes to stdout.
+
+### Reusing an Output Directory
+
+A run never clears `attachments/`, and it appends no cleanup step. Converting a
+*different* mailbox into an existing output directory therefore leaves the
+earlier run's attachments behind — unreferenced, but still on disk. Link
+verification cannot catch this: it only checks that the links the new
+`mailbox.md` contains resolve, and stale files are linked by nothing. Point a
+limited or experimental run at a fresh directory, and delete the output
+directory when you want a mailbox's attachments to be complete and nothing else.
 
 ## Code Structure
 
@@ -75,6 +98,9 @@ markdown and the attachments directory disagree).
    - `attachments/` - Directory containing all extracted attachments (duplicates removed)
      - Files are safely renamed to avoid filesystem conflicts
      - Duplicate filenames are handled with numerical suffixes during initial save
+     - Names are handed out from a set held in memory for the run, never by testing
+       for an existing file, so the same mailbox always produces the same names and a
+       re-run overwrites rather than accumulating `_1`, `_2` variants
      - After deduplication, only one copy of each unique attachment remains
    - `.mbox_to_markdown.lock` - Present only while a conversion is running
 
@@ -97,8 +123,12 @@ markdown and the attachments directory disagree).
 - `html_to_text(html_content)` - Basic HTML-to-text conversion
 - `sanitize_body(body)` - Escapes characters that would break Markdown structure
   (leading `#`, `|`, fences, setext-underline lines, stray `<`) while keeping autolinks
+- `build_body(message)` - Chooses between the plain-text and HTML parts (see Body Selection)
 - `safe_filename(filename)` - Creates filesystem-safe filenames
 - `attachment_link(filename)` - Percent-encodes an attachment name for a link destination
+- `inline_text(text, limit)` - Collapses a header value onto one line and escapes the
+  markdown punctuation that would break the index or a link label
+- `sender_name(from_addr)` - Display name for the index line, falling back to the address
 - `acquire_lock(output_dir)` - Refuses to start when another run owns the output directory
 - `verify_attachment_links(md_file, output_dir)` - Reports links whose target file is missing
 - `main()` - Orchestrates conversion, deduplication, reference updates and verification
@@ -150,6 +180,10 @@ Repository details:
 
 ## Notes
 
+- `README.md` is the user-facing copy of the usage and output description. Its setup
+  step still says to edit `mbox_path`/`output_dir` in the script, which predates the
+  CLI arguments — use the CLI, and keep the README in step when the CLI or the output
+  format changes
 - The script handles basic HTML-to-text conversion for emails without plain text bodies
 - Attachment filenames are sanitized to remove unsafe characters
 - Attachment link destinations are percent-encoded, since Markdown link targets cannot
